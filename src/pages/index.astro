@@ -262,8 +262,9 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       function card(b: Branch) {
         const cur = activePhase(b);
         const sum = b.phases?.[cur.label as string]?.summary;
-        return `<article class="branch-card ${cur.cls}">
-          <header class="branch-head">
+        return `<details class="branch-card ${cur.cls}" data-branch="${b.id}">
+          <summary class="branch-head">
+            <span class="card-chevron">▸</span>
             <div class="branch-heading">
               <h3 class="branch-title">${esc(b.title)}</h3>
               <code class="branch-name">${esc(b.branch)}</code>
@@ -272,18 +273,20 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
               <span class="branch-state ${cur.cls}">${cap(cur.label as string)}</span>
               <span class="branch-updated">${esc(relTime(b.updated))}</span>
             </div>
-          </header>
+          </summary>
 
-          ${section(
-            "Pipeline",
-            `<ol class="pipeline">${pipeline(b)}</ol>
-             <div class="phase-details">${phaseDetails(b)}</div>`,
-          )}
+          <div class="branch-card-body">
+            ${section(
+              "Pipeline",
+              `<ol class="pipeline">${pipeline(b)}</ol>
+               <div class="phase-details">${phaseDetails(b)}</div>`,
+            )}
 
-          ${reviewSection(b)}
+            ${reviewSection(b)}
 
-          ${sum ? section("Latest", `<p class="branch-note">${esc(sum)}</p>`) : ""}
-        </article>`;
+            ${sum ? section("Latest", `<p class="branch-note">${esc(sum)}</p>`) : ""}
+          </div>
+        </details>`;
       }
 
       const bodyEl = document.getElementById("branches-body")!;
@@ -294,6 +297,10 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       // refreshes don't collapse what the user just opened.
       const openDetails = new Set<string>();
 
+      // Cards default to expanded; remember any the user collapsed so a live
+      // refresh doesn't pop them back open.
+      const collapsedCards = new Set<string>();
+
       function applyOpen() {
         bodyEl.querySelectorAll<HTMLElement>(".node").forEach((n) => {
           const on = openDetails.has(n.dataset.key ?? "");
@@ -303,6 +310,19 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         bodyEl.querySelectorAll<HTMLElement>(".phase-detail").forEach((d) => {
           d.hidden = !openDetails.has(d.dataset.key ?? "");
         });
+        bodyEl
+          .querySelectorAll<HTMLDetailsElement>("details.branch-card")
+          .forEach((d) => {
+            const id = d.dataset.branch ?? "";
+            d.open = !collapsedCards.has(id);
+            if (!d.dataset.bound) {
+              d.dataset.bound = "1";
+              d.addEventListener("toggle", () => {
+                if (d.open) collapsedCards.delete(id);
+                else collapsedCards.add(id);
+              });
+            }
+          });
       }
 
       function toggleDetail(key: string) {
@@ -650,19 +670,40 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         border-left-color: var(--border);
       }
 
-      /* Card header — second tier: branch title is the card's headline. */
+      /* Card header — doubles as the collapse toggle (a <summary>). */
       .branch-head {
         display: flex;
         align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
+        gap: 12px;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+      }
+      .branch-head::-webkit-details-marker {
+        display: none;
+      }
+      .branch-card[open] > .branch-head {
         margin-bottom: 18px;
+      }
+      .card-chevron {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.5;
+        margin-top: 3px;
+        transition: transform 0.15s ease;
+        flex: none;
+      }
+      .branch-card[open] > .branch-head .card-chevron {
+        transform: rotate(90deg);
       }
       .branch-heading {
         display: flex;
         flex-direction: column;
         gap: 8px;
         min-width: 0;
+      }
+      .branch-meta {
+        margin-left: auto;
       }
       .branch-title {
         margin: 0;
