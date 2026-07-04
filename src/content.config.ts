@@ -36,19 +36,57 @@ const phaseState = z.object({
   items: z.array(phaseItem).optional(),
 });
 
+// The SpecKit plan.md carries a consistent set of fields across features; the
+// `plan` phase can surface them in its detail panel.
+const techContext = z
+  .object({
+    language: z.string().optional(),
+    dependencies: z.string().optional(),
+    storage: z.string().optional(),
+    testing: z.string().optional(),
+    target_platform: z.string().optional(),
+    project_type: z.string().optional(),
+    performance: z.string().optional(),
+    constraints: z.string().optional(),
+    scale: z.string().optional(),
+  })
+  .partial();
+
+const complexityItem = z.object({
+  violation: z.string(),
+  why: z.string().optional(),
+  rejected: z.string().optional(),
+});
+
+const planState = phaseState.extend({
+  tech_context: techContext.optional(),
+  constitution: z.enum(["pass", "violations", "n/a"]).optional(),
+  structure_decision: z.string().optional(),
+  complexity: z.array(complexityItem).optional(),
+});
+
 const branches = defineCollection({
-  // Ignore _-prefixed files so branches/_TEMPLATE.md can live here as a
-  // reference without rendering as a card.
-  loader: glob({ pattern: ["**/*.md", "!**/_*.md"], base: "./branches" }),
+  // Branch status is plain YAML (one file per branch). Ignore _-prefixed files
+  // so branches/_TEMPLATE.yaml can live here as a reference without rendering.
+  loader: glob({
+    pattern: ["**/*.{yaml,yml}", "!**/_*"],
+    base: "./branches",
+  }),
   schema: z.object({
     branch: z.string(),
     title: z.string().optional(),
     spec: z.string().optional(),
     updated: z.coerce.date().optional(),
+    // Link to the tracking GitHub issue/PR for this branch.
+    issue: z.string().url().optional(),
+    // Name of the Claude Code session driving this branch.
+    session: z.string().optional(),
+    // Latest log line / what the branch is waiting on (was the markdown body).
+    note: z.string().optional(),
     phases: z
       .object({
         specify: phaseState.optional(),
-        plan: phaseState.optional(),
+        plan: planState.optional(),
         tasks: phaseState.optional(),
         implement: phaseState.optional(),
         review: phaseState

@@ -1,0 +1,38 @@
+branch: 103-ads-audit-auto-resolve-leaf-customer
+title: 103 Ads Audit Auto Resolve Leaf Customer
+spec: 103-ads-audit-auto-resolve-leaf-customer
+updated: 2026-07-03 10:59
+phases:
+  specify:
+    status: done
+    summary: "6 FRs captured, 0 clarifications needed"
+    items:
+      - id: US1
+        title: "As a developer, I run ads.sh audit with no flags and get an auto-resolved leaf account"
+        status: done
+      - id: US2
+        title: "As a developer, I see an actionable error when multiple leaf accounts exist"
+        status: done
+      - id: US3
+        title: "As a developer, explicit --customer bypasses all MCC resolution"
+        status: done
+  plan:
+    status: done
+    summary: "new customer_resolver.py pure-function module; wire into audit.py; direct-children GAQL; NamedTuple LeafAccount"
+  tasks:
+    status: done
+    summary: "13 tasks across 4 phases; MVP = Phase 1+2 (T001-T010)"
+  implement:
+    status: done
+    summary: "customer_resolver.py (pure fns) + audit.py wire + 12 tests; 230 total passing"
+  review:
+    status: done
+    summary: "6 findings; 2 critical fixed (exception wrapping, resource-name guard); 233 tests green"
+    substeps:
+      code: done
+      comments: done
+      tests: done
+      errors: done
+      types: done
+      simplify: done
+      pr: pending

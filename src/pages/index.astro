@@ -60,6 +60,17 @@ const statuses = ["all", "in-progress", "blocked", "done"];
 const fmt = (d: Date) =>
   d.valueOf() === 0 ? "" : d.toISOString().slice(0, 10);
 const built = new Date().toISOString().slice(0, 16).replace("T", " ");
+// Group entries by date for Timeline view — insertion order preserves newest-first from rendered
+const byDate: { date: string; items: (typeof rendered)[number][] }[] = [];
+const _seenDates = new Map<string, number>();
+for (const e of rendered) {
+  const key = fmt(e.date) || "no date";
+  if (!_seenDates.has(key)) {
+    _seenDates.set(key, byDate.length);
+    byDate.push({ date: key, items: [] });
+  }
+  byDate[_seenDates.get(key)!].items.push(e);
+}
 ---
 
 <!doctype html>
@@ -99,52 +110,98 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         </details>
       </section>
 
-      <main id="feed" class="col col-feed">
-      {
-        rendered.map(({ title, author, date, status, tags, Content }) => (
-          <article class="card" data-status={status}>
-            <div class="card-head">
-              <h2>{title}</h2>
-              <span class={`badge ${status}`}>{status}</span>
-            </div>
-            <div class="meta">
-              {author}
-              {fmt(date) && ` · ${fmt(date)}`}
-              {tags.map((t) => (
-                <span class="tag"> #{t}</span>
+      <div class="col col-feed">
+        <div class="view-tabs" id="view-tabs">
+          <button class="view-tab active" data-view="feed">Feed</button>
+          <button class="view-tab" data-view="timeline">Timeline</button>
+        </div>
+
+        <div id="feed-view">
+        {
+          rendered.map(({ title, author, date, status, tags, Content }) => (
+            <article class="card" data-status={status}>
+              <div class="card-head">
+                <h2>{title}</h2>
+                <span class={`badge ${status}`}>{status}</span>
+              </div>
+              <div class="meta">
+                {author}
+                {fmt(date) && ` · ${fmt(date)}`}
+                {tags.map((t) => (
+                  <span class="tag"> #{t}</span>
+                ))}
+              </div>
+              <div class="body-wrap">
+                <div class="body">
+                  <Content />
+                </div>
+                <button class="body-toggle" hidden>read more</button>
+              </div>
+            </article>
+          ))
+        }
+        <div class="empty" id="empty" hidden>No entries for this status.</div>
+        </div>
+
+        <div id="timeline-view" hidden>
+          <div class="tl-body">
+          {byDate.map(({ date, items }) => (
+            <div class="tl-group">
+              <div class="tl-date-label">{date}</div>
+              {items.map(({ title, author, date: d, status }) => (
+                <div class="tl-row" data-status={status}>
+                  <span class="tl-dot" aria-hidden="true"></span>
+                  <div class="tl-info">
+                    <span class="tl-title">{title}</span>
+                    <span class="tl-meta">
+                      {author || "unknown"}{fmt(d) && ` · ${fmt(d)}`}
+                    </span>
+                  </div>
+                </div>
               ))}
             </div>
-            <div class="body">
-              <Content />
-            </div>
-          </article>
-        ))
-      }
-      <div class="empty" id="empty" hidden>No entries for this status.</div>
-      </main>
+          ))}
+          </div>
+          <div class="tl-empty" id="tl-empty" hidden>No entries for this status.</div>
+        </div>
+      </div>
     </div>
-
-    <footer>
-      Built with Astro — drop new <code>.md</code> files in <code>entries/</code>,
-      then <code>npm run dev</code> live-reloads.
-    </footer>
 
     <script>
       // --- Active branches panel: client-rendered from /branches.json so it can
       // poll and live-update without a full-page reload. ------------------------
       type PhaseItem = { id?: string; title: string; description?: string; status?: string };
+      type TechContext = {
+        language?: string;
+        dependencies?: string;
+        storage?: string;
+        testing?: string;
+        target_platform?: string;
+        project_type?: string;
+        performance?: string;
+        constraints?: string;
+        scale?: string;
+      };
+      type Complexity = { violation: string; why?: string; rejected?: string };
       type PhaseState = {
         status?: string;
         summary?: string;
         description?: string;
         items?: PhaseItem[];
         substeps?: Record<string, string>;
+        // plan-phase extras (from SpecKit plan.md)
+        tech_context?: TechContext;
+        constitution?: "pass" | "violations" | "n/a";
+        structure_decision?: string;
+        complexity?: Complexity[];
       };
       type Branch = {
         id: string;
         branch: string;
         title: string;
         spec: string | null;
+        issue: string | null;
+        session: string | null;
         updated: string | null;
         phases: Record<string, PhaseState>;
         note: string | null;
@@ -177,6 +234,12 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
 
       const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+      // "…/issues/42" -> "#42"; otherwise a generic "Issue" label.
+      const issueLabel = (url: string) => {
+        const n = url.match(/(\d+)\/?$/)?.[1];
+        return n ? `#${n}` : "Issue";
+      };
+
       const itemNoun: Record<string, string> = {
         specify: "User stories",
         plan: "Design items",
@@ -197,10 +260,56 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         }).join("");
       }
 
+      const TECH_FIELDS: [keyof TechContext, string][] = [
+        ["language", "Language"],
+        ["dependencies", "Dependencies"],
+        ["storage", "Storage"],
+        ["testing", "Testing"],
+        ["target_platform", "Target platform"],
+        ["project_type", "Project type"],
+        ["performance", "Performance"],
+        ["constraints", "Constraints"],
+        ["scale", "Scale / scope"],
+      ];
+
+      // Extra plan.md-derived detail: Technical Context, Constitution verdict,
+      // Structure Decision, Complexity Tracking.
+      function planExtras(p?: PhaseState) {
+        if (!p) return "";
+        const tc = p.tech_context ?? {};
+        const rows = TECH_FIELDS.filter(([k]) => tc[k])
+          .map(
+            ([k, label]) =>
+              `<div class="tech-row"><dt>${label}</dt><dd>${esc(tc[k]!)}</dd></div>`,
+          )
+          .join("");
+        const tech = rows
+          ? `<div class="items-label">Technical context</div><dl class="tech-context">${rows}</dl>`
+          : "";
+        const constitution = p.constitution
+          ? `<div class="constitution ${p.constitution}">Constitution: ${p.constitution === "n/a" ? "N/A" : cap(p.constitution)}</div>`
+          : "";
+        const structure = p.structure_decision
+          ? `<div class="items-label">Structure decision</div><p class="phase-desc">${esc(p.structure_decision)}</p>`
+          : "";
+        const complexity = p.complexity?.filter((c) => c.violation).length
+          ? `<div class="items-label">Complexity tracking</div>
+             <ul class="complexity">${p.complexity
+               .filter((c) => c.violation)
+               .map(
+                 (c) =>
+                   `<li><span class="cx-violation">${esc(c.violation)}</span>${c.why ? `<span class="cx-line"><b>Why:</b> ${esc(c.why)}</span>` : ""}${c.rejected ? `<span class="cx-line"><b>Rejected:</b> ${esc(c.rejected)}</span>` : ""}</li>`,
+               )
+               .join("")}</ul>`
+          : "";
+        return constitution + tech + structure + complexity;
+      }
+
       function phaseDetails(b: Branch) {
         return PHASES.map((name) => {
           const p = b.phases?.[name];
           const key = `${b.id}::${name}`;
+          const extras = name === "plan" ? planExtras(p) : "";
           const desc = p?.description
             ? `<p class="phase-desc">${esc(p.description)}</p>`
             : "";
@@ -217,8 +326,8 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
                  .join("")}</ul>`
             : "";
           const inner =
-            desc || items
-              ? desc + items
+            desc || items || extras
+              ? desc + extras + items
               : `<p class="phase-empty">No ${(itemNoun[name] ?? "details").toLowerCase()} captured for ${cap(name)} yet.</p>`;
           return `<div class="phase-detail" data-key="${key}" hidden>
             <div class="phase-detail-head">
@@ -262,18 +371,25 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       function card(b: Branch) {
         const cur = activePhase(b);
         const sum = b.phases?.[cur.label as string]?.summary;
-        return `<details class="branch-card ${cur.cls}" data-branch="${b.id}">
-          <summary class="branch-head">
-            <span class="card-chevron">▸</span>
+        const collapsed = collapsedCards.has(b.id);
+        return `<div class="branch-card ${cur.cls}${collapsed ? " collapsed" : ""}" data-branch="${b.id}">
+          <div class="branch-head">
+            <button class="card-toggle" type="button" aria-expanded="true" aria-label="Collapse ${esc(b.title)}">
+              <span class="card-chevron">▸</span>
+            </button>
             <div class="branch-heading">
               <h3 class="branch-title">${esc(b.title)}</h3>
-              <code class="branch-name">${esc(b.branch)}</code>
+              <div class="branch-sub">
+                <code class="branch-name">${esc(b.branch)}</code>
+                ${b.issue ? `<a class="issue-link" href="${esc(b.issue)}" target="_blank" rel="noopener">${esc(issueLabel(b.issue))} ↗</a>` : ""}
+                ${b.session ? `<span class="session-name">⌥ ${esc(b.session)}</span>` : ""}
+              </div>
             </div>
             <div class="branch-meta">
               <span class="branch-state ${cur.cls}">${cap(cur.label as string)}</span>
               <span class="branch-updated">${esc(relTime(b.updated))}</span>
             </div>
-          </summary>
+          </div>
 
           <div class="branch-card-body">
             ${section(
@@ -311,18 +427,20 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
           d.hidden = !openDetails.has(d.dataset.key ?? "");
         });
         bodyEl
-          .querySelectorAll<HTMLDetailsElement>("details.branch-card")
-          .forEach((d) => {
-            const id = d.dataset.branch ?? "";
-            d.open = !collapsedCards.has(id);
-            if (!d.dataset.bound) {
-              d.dataset.bound = "1";
-              d.addEventListener("toggle", () => {
-                if (d.open) collapsedCards.delete(id);
-                else collapsedCards.add(id);
-              });
-            }
+          .querySelectorAll<HTMLElement>(".branch-card")
+          .forEach((card) => {
+            const collapsed = collapsedCards.has(card.dataset.branch ?? "");
+            card.classList.toggle("collapsed", collapsed);
+            card
+              .querySelector(".card-toggle")
+              ?.setAttribute("aria-expanded", collapsed ? "false" : "true");
           });
+      }
+
+      function toggleCard(id: string) {
+        if (collapsedCards.has(id)) collapsedCards.delete(id);
+        else collapsedCards.add(id);
+        applyOpen();
       }
 
       function toggleDetail(key: string) {
@@ -332,6 +450,21 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       }
 
       bodyEl.addEventListener("click", (e) => {
+        // Links (e.g. the issue link) live inside the card <summary>; open them
+        // without letting the click collapse/expand the card.
+        const link = (e.target as HTMLElement).closest<HTMLAnchorElement>("a");
+        if (link) {
+          e.preventDefault();
+          window.open(link.href, "_blank", "noopener");
+          return;
+        }
+        // Only the chevron button collapses the card — the title stays selectable.
+        const toggle = (e.target as HTMLElement).closest<HTMLElement>(".card-toggle");
+        if (toggle) {
+          const id = toggle.closest<HTMLElement>(".branch-card")?.dataset.branch;
+          if (id) toggleCard(id);
+          return;
+        }
         const node = (e.target as HTMLElement).closest<HTMLElement>(".node");
         if (node?.dataset.key) toggleDetail(node.dataset.key);
       });
@@ -364,13 +497,93 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       refreshBranches();
       setInterval(refreshBranches, 5000);
 
+      // View tab switching with 120ms→150ms crossfade
+      const viewTabs = document.getElementById("view-tabs")!;
+      const feedView = document.getElementById("feed-view")!;
+      const timelineView = document.getElementById("timeline-view")!;
+
+      viewTabs.addEventListener("click", (e) => {
+        const tab = (e.target as HTMLElement).closest<HTMLButtonElement>(".view-tab");
+        if (!tab || tab.classList.contains("active")) return;
+        const view = tab.dataset.view;
+        viewTabs.querySelectorAll(".view-tab").forEach((t) =>
+          t.classList.toggle("active", t === tab),
+        );
+        const outgoing = view === "timeline" ? feedView : timelineView;
+        const incoming = view === "timeline" ? timelineView : feedView;
+        outgoing.style.opacity = "0";
+        outgoing.style.transition = "opacity 0.12s ease";
+        setTimeout(() => {
+          outgoing.hidden = true;
+          outgoing.style.cssText = "";
+          incoming.hidden = false;
+          incoming.style.opacity = "0";
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              incoming.style.opacity = "1";
+              incoming.style.transition = "opacity 0.15s ease";
+              incoming.addEventListener(
+                "transitionend",
+                () => { incoming.style.cssText = ""; },
+                { once: true },
+              );
+            }),
+          );
+        }, 120);
+      });
+
+      // Feed card body truncation: animated expand / collapse
+      document.querySelectorAll<HTMLElement>(".body-wrap").forEach((wrap) => {
+        const body = wrap.querySelector<HTMLElement>(".body");
+        const toggle = wrap.querySelector<HTMLElement>(".body-toggle");
+        if (!body || !toggle) return;
+        body.style.maxHeight = "9rem";
+        if (body.scrollHeight > body.clientHeight + 4) {
+          wrap.classList.add("truncated");
+          toggle.hidden = false;
+          toggle.addEventListener("click", () => {
+            if (!wrap.classList.contains("expanded")) {
+              const fullH = body.scrollHeight;
+              body.style.maxHeight = fullH + "px";
+              wrap.classList.add("expanded");
+              wrap.classList.remove("truncated");
+              toggle.textContent = "show less";
+              body.addEventListener(
+                "transitionend",
+                () => {
+                  body.style.maxHeight = "none";
+                  body.style.overflow = "visible";
+                },
+                { once: true },
+              );
+            } else {
+              body.style.overflow = "hidden";
+              body.style.maxHeight = body.scrollHeight + "px";
+              setTimeout(() => {
+                body.style.maxHeight = "9rem";
+                wrap.classList.remove("expanded");
+                wrap.classList.add("truncated");
+                toggle.textContent = "read more";
+              }, 16);
+            }
+          });
+        } else {
+          body.style.maxHeight = "none";
+          body.style.overflow = "visible";
+        }
+      });
+
+      // Status filter: applies to both feed cards and timeline rows
       const filters = document.getElementById("filters")!;
       const cards = [...document.querySelectorAll<HTMLElement>(".card")];
       const empty = document.getElementById("empty")!;
+      const tlRows = [...document.querySelectorAll<HTMLElement>(".tl-row")];
+      const tlGroups = [...document.querySelectorAll<HTMLElement>(".tl-group")];
+      const tlEmpty = document.getElementById("tl-empty")!;
 
       filters.addEventListener("click", (e) => {
         const btn = (e.target as HTMLElement).closest("button");
-        if (!btn) return;
+        if (!btn || !btn.dataset.status) return;
         const status = btn.dataset.status;
         filters.querySelectorAll("button").forEach((b) =>
           b.classList.toggle("active", b === btn),
@@ -382,20 +595,34 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
           if (show) visible++;
         }
         empty.hidden = visible > 0;
+        let tlVisible = 0;
+        for (const row of tlRows) {
+          const show = status === "all" || row.dataset.status === status;
+          row.hidden = !show;
+          if (show) tlVisible++;
+        }
+        tlEmpty.hidden = tlVisible > 0;
+        for (const group of tlGroups) {
+          const hasVisible = [...group.querySelectorAll<HTMLElement>(".tl-row")].some(
+            (r) => !r.hidden,
+          );
+          group.hidden = !hasVisible;
+        }
       });
     </script>
 
     <style is:global>
       :root {
-        --bg: #0d1117;
-        --panel: #161b22;
-        --border: #30363d;
-        --text: #e6edf3;
-        --muted: #8b949e;
-        --accent: #58a6ff;
-        --done: #3fb950;
-        --progress: #d29922;
-        --blocked: #f85149;
+        --bg: oklch(0.09 0.013 268);
+        --panel: oklch(0.13 0.013 268);
+        --border: oklch(0.24 0.018 268);
+        --text: oklch(0.95 0.005 268);
+        --muted: oklch(0.62 0.012 268);
+        --accent: oklch(0.71 0.20 295);
+        --done: oklch(0.72 0.17 145);
+        --progress: oklch(0.76 0.13 75);
+        --blocked: oklch(0.65 0.22 25);
+        --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
       }
       * {
         box-sizing: border-box;
@@ -422,7 +649,7 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         gap: 12px;
         position: sticky;
         top: 0;
-        background: rgba(13, 17, 23, 0.85);
+        background: color-mix(in oklch, var(--bg) 85%, transparent);
         backdrop-filter: blur(8px);
         z-index: 5;
       }
@@ -449,6 +676,7 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         border-radius: 20px;
         cursor: pointer;
         font-size: 13px;
+        transition: border-color 0.15s ease, color 0.15s ease;
       }
       .filters button.active {
         color: var(--text);
@@ -476,19 +704,22 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       .card {
         background: var(--panel);
         border: 1px solid var(--border);
-        border-left-width: 4px;
         border-radius: 10px;
         padding: 18px 20px;
         margin-bottom: 16px;
+        --card-surface: var(--panel);
       }
       .card[data-status="done"] {
-        border-left-color: var(--done);
+        background: color-mix(in oklch, var(--done) 5%, var(--panel));
+        --card-surface: color-mix(in oklch, var(--done) 5%, var(--panel));
       }
       .card[data-status="in-progress"] {
-        border-left-color: var(--progress);
+        background: color-mix(in oklch, var(--progress) 5%, var(--panel));
+        --card-surface: color-mix(in oklch, var(--progress) 5%, var(--panel));
       }
       .card[data-status="blocked"] {
-        border-left-color: var(--blocked);
+        background: color-mix(in oklch, var(--blocked) 5%, var(--panel));
+        --card-surface: color-mix(in oklch, var(--blocked) 5%, var(--panel));
       }
       .card-head {
         display: flex;
@@ -511,15 +742,15 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         font-weight: 600;
       }
       .badge.done {
-        background: rgba(63, 185, 80, 0.15);
+        background: color-mix(in oklch, var(--done) 15%, transparent);
         color: var(--done);
       }
       .badge.in-progress {
-        background: rgba(210, 153, 34, 0.15);
+        background: color-mix(in oklch, var(--progress) 15%, transparent);
         color: var(--progress);
       }
       .badge.blocked {
-        background: rgba(248, 81, 73, 0.15);
+        background: color-mix(in oklch, var(--blocked) 15%, transparent);
         color: var(--blocked);
       }
       .meta {
@@ -533,6 +764,8 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       .body {
         border-top: 1px solid var(--border);
         padding-top: 12px;
+        overflow: hidden;
+        transition: max-height 0.3s var(--ease-out-quart);
       }
       .body :first-child {
         margin-top: 0;
@@ -540,14 +773,31 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       .body :last-child {
         margin-bottom: 0;
       }
+      .body h1 {
+        font-size: 1.1em;
+        font-weight: 700;
+        margin: 0.6em 0 0.4em;
+        text-wrap: balance;
+      }
+      .body h2 {
+        font-size: 1em;
+        font-weight: 700;
+        margin: 0.6em 0 0.4em;
+      }
+      .body h3,
+      .body h4 {
+        font-size: 0.95em;
+        font-weight: 600;
+        margin: 0.5em 0 0.3em;
+      }
       .body code {
-        background: rgba(110, 118, 129, 0.25);
+        background: color-mix(in oklch, var(--border) 60%, transparent);
         padding: 1px 5px;
         border-radius: 5px;
         font-size: 90%;
       }
       .body pre {
-        background: #010409;
+        background: oklch(0.04 0.006 268);
         padding: 12px;
         border-radius: 8px;
         overflow: auto;
@@ -559,16 +809,156 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       .body a {
         color: var(--accent);
       }
+      .body p {
+        max-width: 68ch;
+        text-wrap: pretty;
+      }
       .empty {
         color: var(--muted);
         text-align: center;
         padding: 60px 0;
       }
-      footer {
-        text-align: center;
+
+      /* View tabs (Feed / Timeline toggle) */
+      .view-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+      }
+      .view-tab {
+        background: var(--panel);
         color: var(--muted);
+        border: 1px solid var(--border);
+        padding: 5px 16px;
+        border-radius: 20px;
+        cursor: pointer;
+        font-size: 13px;
+        font-weight: 500;
+        transition: border-color 0.15s ease, color 0.15s ease;
+      }
+      .view-tab.active {
+        color: var(--text);
+        border-color: var(--accent);
+      }
+
+      /* Feed card body truncation */
+      .body-wrap {
+        position: relative;
+      }
+      .body-wrap::after {
+        content: '';
+        position: absolute;
+        bottom: 26px;
+        left: 0;
+        right: 0;
+        height: 3rem;
+        background: linear-gradient(to bottom, transparent, var(--card-surface, var(--panel)));
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+      }
+      .body-wrap.truncated::after {
+        opacity: 1;
+      }
+      .body-toggle {
+        background: none;
+        border: none;
+        color: var(--accent);
         font-size: 12px;
-        padding: 20px;
+        font-weight: 600;
+        padding: 6px 0 0;
+        cursor: pointer;
+        display: block;
+        transition: opacity 0.1s ease;
+      }
+      .body-toggle[hidden] {
+        display: none;
+      }
+      .body-toggle:hover {
+        opacity: 0.75;
+      }
+
+      /* Timeline view */
+      .tl-body {
+        position: relative;
+        padding-left: 24px;
+      }
+      .tl-body::before {
+        content: '';
+        position: absolute;
+        left: 8px;
+        top: 20px;
+        bottom: 16px;
+        width: 1px;
+        background: var(--border);
+      }
+      .tl-group {
+        margin-bottom: 8px;
+      }
+      .tl-date-label {
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--muted);
+        padding: 14px 0 6px;
+      }
+      .tl-group:first-child .tl-date-label {
+        padding-top: 2px;
+      }
+      .tl-row {
+        position: relative;
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 5px 0;
+      }
+      .tl-dot {
+        position: absolute;
+        left: -20px;
+        top: 8px;
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--panel);
+        border: 1.5px solid var(--border);
+        z-index: 1;
+        flex-shrink: 0;
+      }
+      .tl-row[data-status="done"] .tl-dot {
+        background: var(--done);
+        border-color: var(--done);
+      }
+      .tl-row[data-status="in-progress"] .tl-dot {
+        background: var(--progress);
+        border-color: var(--progress);
+      }
+      .tl-row[data-status="blocked"] .tl-dot {
+        background: var(--blocked);
+        border-color: var(--blocked);
+      }
+      .tl-info {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .tl-title {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text);
+        line-height: 1.35;
+      }
+      .tl-meta {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .tl-empty {
+        color: var(--muted);
+        text-align: center;
+        padding: 40px 0;
+        font-size: 14px;
       }
 
       /* --- Active branches panel ------------------------------------------- */
@@ -611,7 +1001,7 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         letter-spacing: 0.2px;
       }
       .branches-count {
-        background: rgba(88, 166, 255, 0.15);
+        background: color-mix(in oklch, var(--accent) 15%, transparent);
         color: var(--accent);
         font-size: 12px;
         font-weight: 700;
@@ -653,48 +1043,67 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       .branch-card {
         background: var(--panel);
         border: 1px solid var(--border);
-        border-left-width: 3px;
         border-radius: 12px;
         padding: 18px 20px;
       }
       .branch-card.active {
-        border-left-color: var(--progress);
+        background: color-mix(in oklch, var(--progress) 5%, var(--panel));
       }
       .branch-card.blocked {
-        border-left-color: var(--blocked);
+        background: color-mix(in oklch, var(--blocked) 5%, var(--panel));
       }
       .branch-card.done {
-        border-left-color: var(--done);
-      }
-      .branch-card.pending {
-        border-left-color: var(--border);
+        background: color-mix(in oklch, var(--done) 5%, var(--panel));
       }
 
-      /* Card header — doubles as the collapse toggle (a <summary>). */
+      /* Card header — the title is plain selectable text; only the chevron
+         button toggles the card. */
       .branch-head {
         display: flex;
         align-items: flex-start;
-        gap: 12px;
-        cursor: pointer;
-        list-style: none;
-        user-select: none;
-      }
-      .branch-head::-webkit-details-marker {
-        display: none;
-      }
-      .branch-card[open] > .branch-head {
+        gap: 10px;
         margin-bottom: 18px;
       }
-      .card-chevron {
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.5;
-        margin-top: 3px;
-        transition: transform 0.15s ease;
-        flex: none;
+      .branch-card.collapsed .branch-head {
+        margin-bottom: 0;
       }
-      .branch-card[open] > .branch-head .card-chevron {
+      .card-toggle {
+        flex: none;
+        margin-top: 2px;
+        display: grid;
+        place-items: center;
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        color: var(--muted);
+        cursor: pointer;
+        transition: background 0.12s ease, border-color 0.12s ease;
+      }
+      .card-toggle:hover {
+        background: color-mix(in oklch, var(--accent) 12%, transparent);
+        border-color: color-mix(in oklch, var(--accent) 40%, transparent);
+        color: var(--accent);
+      }
+      .card-toggle:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 1px;
+      }
+      .card-chevron {
+        font-size: 13px;
+        line-height: 1;
+        transition: transform 0.15s ease;
+      }
+      .branch-card:not(.collapsed) .card-chevron {
         transform: rotate(90deg);
+      }
+      .branch-card-body {
+        display: none;
+      }
+      .branch-card:not(.collapsed) .branch-card-body {
+        display: block;
       }
       .branch-heading {
         display: flex;
@@ -712,14 +1121,37 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         line-height: 1.2;
         color: var(--text);
         letter-spacing: -0.2px;
+        text-wrap: balance;
+      }
+      .branch-sub {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       .branch-name {
-        align-self: flex-start;
-        background: rgba(110, 118, 129, 0.22);
+        background: color-mix(in oklch, var(--border) 55%, transparent);
         color: var(--muted);
         padding: 2px 8px;
         border-radius: 6px;
         font-size: 12px;
+      }
+      .issue-link {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--accent);
+        text-decoration: none;
+        opacity: 0.85;
+      }
+      .issue-link:hover {
+        opacity: 1;
+        text-decoration: underline;
+      }
+      .session-name {
+        font-size: 12px;
+        color: var(--muted);
+        opacity: 0.75;
+        white-space: nowrap;
       }
       .branch-meta {
         display: flex;
@@ -738,19 +1170,19 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         white-space: nowrap;
       }
       .branch-state.active {
-        background: rgba(210, 153, 34, 0.15);
+        background: color-mix(in oklch, var(--progress) 15%, transparent);
         color: var(--progress);
       }
       .branch-state.blocked {
-        background: rgba(248, 81, 73, 0.15);
+        background: color-mix(in oklch, var(--blocked) 15%, transparent);
         color: var(--blocked);
       }
       .branch-state.done {
-        background: rgba(63, 185, 80, 0.15);
+        background: color-mix(in oklch, var(--done) 15%, transparent);
         color: var(--done);
       }
       .branch-state.pending {
-        background: rgba(139, 148, 158, 0.15);
+        background: color-mix(in oklch, var(--muted) 15%, transparent);
         color: var(--muted);
       }
       .branch-updated {
@@ -821,11 +1253,11 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         outline: none;
       }
       .pipeline .node:hover {
-        background: rgba(255, 255, 255, 0.04);
+        background: color-mix(in oklch, var(--text) 4%, transparent);
       }
       .pipeline .node.open,
       .pipeline .node:focus-visible {
-        background: rgba(88, 166, 255, 0.1);
+        background: color-mix(in oklch, var(--accent) 12%, transparent);
       }
       .pipeline .node .dot {
         transition: transform 0.12s ease;
@@ -860,7 +1292,7 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       .pipeline .node.done .dot {
         border-color: var(--done);
         color: var(--done);
-        background: rgba(63, 185, 80, 0.12);
+        background: color-mix(in oklch, var(--done) 12%, transparent);
       }
       .pipeline .node.active {
         color: var(--progress);
@@ -869,7 +1301,7 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       .pipeline .node.active .dot {
         border-color: var(--progress);
         color: var(--progress);
-        background: rgba(210, 153, 34, 0.14);
+        background: color-mix(in oklch, var(--progress) 14%, transparent);
       }
       .pipeline .node.blocked {
         color: var(--blocked);
@@ -878,7 +1310,7 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       .pipeline .node.blocked .dot {
         border-color: var(--blocked);
         color: var(--blocked);
-        background: rgba(248, 81, 73, 0.12);
+        background: color-mix(in oklch, var(--blocked) 12%, transparent);
       }
 
       /* Expanded per-phase detail — stories / tasks / description. */
@@ -886,12 +1318,11 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         margin-top: 14px;
       }
       .phase-detail {
-        border: 1px solid var(--border);
-        border-left: 3px solid var(--accent);
+        border: 1px solid color-mix(in oklch, var(--accent) 30%, var(--border));
         border-radius: 8px;
         padding: 12px 14px;
         margin-top: 10px;
-        background: rgba(88, 166, 255, 0.04);
+        background: color-mix(in oklch, var(--accent) 5%, var(--panel));
       }
       .phase-detail-head {
         display: flex;
@@ -962,7 +1393,7 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       }
       .item.done .item-title {
         text-decoration: line-through;
-        text-decoration-color: rgba(139, 148, 158, 0.5);
+        text-decoration-color: color-mix(in oklch, var(--muted) 50%, transparent);
       }
       .item-text {
         display: flex;
@@ -990,6 +1421,78 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
         font-style: italic;
       }
 
+      /* Plan extras: constitution verdict, technical context, complexity. */
+      .constitution {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
+        padding: 3px 9px;
+        border-radius: 20px;
+        margin-bottom: 12px;
+        border: 1px solid var(--border);
+        color: var(--muted);
+      }
+      .constitution.pass {
+        color: var(--done);
+        border-color: color-mix(in oklch, var(--done) 45%, transparent);
+        background: color-mix(in oklch, var(--done) 10%, transparent);
+      }
+      .constitution.violations {
+        color: var(--blocked);
+        border-color: color-mix(in oklch, var(--blocked) 45%, transparent);
+        background: color-mix(in oklch, var(--blocked) 10%, transparent);
+      }
+      .tech-context {
+        margin: 0 0 12px;
+        display: grid;
+        gap: 6px;
+      }
+      .tech-row {
+        display: grid;
+        grid-template-columns: 130px 1fr;
+        gap: 10px;
+        font-size: 13px;
+      }
+      .tech-row dt {
+        color: var(--muted);
+        font-weight: 600;
+      }
+      .tech-row dd {
+        margin: 0;
+        color: var(--text);
+      }
+      .complexity {
+        list-style: none;
+        margin: 0 0 4px;
+        padding: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .complexity li {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        font-size: 13px;
+        border-left: 2px solid color-mix(in oklch, var(--blocked) 50%, transparent);
+        padding-left: 10px;
+      }
+      .cx-violation {
+        font-weight: 600;
+        color: var(--text);
+      }
+      .cx-line {
+        color: var(--muted);
+      }
+      @media (max-width: 560px) {
+        .tech-row {
+          grid-template-columns: 1fr;
+          gap: 1px;
+        }
+      }
+
       /* Review passes — list items, as chips. */
       .review-list {
         list-style: none;
@@ -1014,25 +1517,38 @@ const built = new Date().toISOString().slice(0, 16).replace("T", " ");
       }
       .chip.done {
         color: var(--done);
-        border-color: rgba(63, 185, 80, 0.4);
-        background: rgba(63, 185, 80, 0.08);
+        border-color: color-mix(in oklch, var(--done) 40%, transparent);
+        background: color-mix(in oklch, var(--done) 8%, transparent);
       }
       .chip.active {
         color: var(--progress);
-        border-color: rgba(210, 153, 34, 0.45);
-        background: rgba(210, 153, 34, 0.1);
+        border-color: color-mix(in oklch, var(--progress) 45%, transparent);
+        background: color-mix(in oklch, var(--progress) 10%, transparent);
         font-weight: 600;
       }
       .chip.blocked {
         color: var(--blocked);
-        border-color: rgba(248, 81, 73, 0.45);
-        background: rgba(248, 81, 73, 0.08);
+        border-color: color-mix(in oklch, var(--blocked) 45%, transparent);
+        background: color-mix(in oklch, var(--blocked) 8%, transparent);
       }
       .branch-note {
         margin: 0;
         color: var(--text);
         font-size: 13px;
         line-height: 1.5;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .branches .chevron,
+        .card-chevron,
+        .sec-chevron,
+        .pipeline .node .dot,
+        .filters button,
+        .body,
+        .body-wrap::after,
+        .view-tab {
+          transition: none !important;
+        }
       }
     </style>
   </body>

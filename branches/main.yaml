@@ -1,0 +1,23 @@
+branch: main
+title: Main
+spec: main
+updated: 2026-07-03 11:00
+phases:
+  specify:
+    status: done
+  plan:
+    status: done
+  tasks:
+    status: done
+  implement:
+    status: done
+  review:
+    status: active
+    substeps:
+      code: pending
+      comments: pending
+      tests: pending
+      errors: pending
+      types: pending
+      simplify: pending
+      pr: done
