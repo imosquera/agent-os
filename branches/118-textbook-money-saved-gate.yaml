@@ -1,0 +1,42 @@
+branch: 118-textbook-money-saved-gate
+title: 118 Textbook Money Saved Gate
+spec: 118-textbook-money-saved-gate
+updated: 2026-07-06 18:51
+note: ""
+
+phases:
+  specify:
+    status: done
+    summary: "10 requirements captured, 0 clarifications needed"
+    description: ""
+    items:
+      - id: US1
+        title: "Stylist lands and sees savings counter hero"
+        status: done
+      - id: US2
+        title: "Visitor reads how-it-works step 3 outcome"
+        status: done
+      - id: US3
+        title: "Visitor finds single pricing one-liner"
+        status: done
+  plan:
+    status: done
+    summary: "Static HTML page; new file alongside existing TextBook; reuses early-access.ts; savings counter is CSS blur, no new TS boundaries"
+    description: ""
+  tasks:
+    status: done
+    summary: "13 tasks across 5 phases; Wave 4 runs 6 tasks in parallel; MVP = W1-W5"
+  implement:
+    status: done
+    summary: "HTML page created; savings counter mockup with CSS blur; all 11 constitution principles PASS or N/A"
+  review:
+    status: done
+    summary: "code: PASS (1 copy fix applied — week/month contradiction); simplify: redundant text-white + long-form % fixed"
+    substeps:
+      code: done
+      comments: pending
+      tests: pending
+      errors: pending
+      types: pending
+      simplify: done
+      pr: done

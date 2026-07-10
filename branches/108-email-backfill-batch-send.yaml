@@ -1,0 +1,32 @@
+branch: 108-email-backfill-batch-send
+title: 108 Email Backfill Batch Send
+spec: 108-email-backfill-batch-send
+updated: 2026-07-05 12:25
+note: ""
+
+phases:
+  specify:
+    status: done
+    summary: ""
+    description: ""
+  plan:
+    status: done
+    summary: ""
+    description: ""
+  tasks:
+    status: done
+    summary: ""
+  implement:
+    status: done
+    summary: ""
+  review:
+    status: active
+    summary: ""
+    substeps:
+      code: done
+      comments: done
+      tests: done
+      errors: done
+      types: done
+      simplify: done
+      pr: pending

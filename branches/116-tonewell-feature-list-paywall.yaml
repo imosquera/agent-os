@@ -1,0 +1,42 @@
+branch: 116-tonewell-feature-list-paywall
+title: 116 Tonewell Feature List Paywall
+spec: 116-tonewell-feature-list-paywall
+updated: 2026-07-06 21:48
+note: ""
+
+phases:
+  specify:
+    status: done
+    summary: "9 requirements captured, 0 clarifications needed"
+    description: ""
+    items:
+      - id: US1
+        title: "Prospect scans comparison table mid-page"
+        status: done
+      - id: US2
+        title: "How it works section removed"
+        status: done
+      - id: US3
+        title: "Feature blocks section removed"
+        status: done
+  plan:
+    status: done
+    summary: "Single HTML file: remove 'How it works' + feature blocks, insert comparison table with .compare-table CSS class; all 11 constitution principles N/A or PASS"
+    description: ""
+  tasks:
+    status: done
+    summary: "8 tasks across 4 phases; single file edit; 4 parallel verification tasks in final wave"
+  implement:
+    status: done
+    summary: "tonewell-review-reply-v2.html: removed How-it-works + features sections, inserted compare-table with responsive CSS; constitution audit all 11 N/A or PASS"
+  review:
+    status: done
+    summary: "code: 3 fixes applied (scope attr, dead CSS, bg-aqua, caption); simplify: collapsed ::before shared rules; no blockers"
+    substeps:
+      code: active
+      comments: done
+      tests: done
+      errors: done
+      types: done
+      simplify: done
+      pr: done

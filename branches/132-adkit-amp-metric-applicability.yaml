@@ -1,0 +1,36 @@
+branch: 132-adkit-amp-metric-applicability
+title: 132 Adkit Amp Metric Applicability
+spec: 132-adkit-amp-metric-applicability
+updated: 2026-07-09 02:34
+note: ""
+
+phases:
+  specify:
+    status: done
+    summary: "4 FRs captured, 0 clarifications"
+    description: ""
+    items:
+      - id: US1
+        title: "AMP finding only fires for pages that actually have AMP"
+        status: done
+  plan:
+    status: done
+    summary: "Constitution Check PASS (11/11), Parse Boundaries clean for mobileFindings; single-predicate change scoped"
+    description: ""
+  tasks:
+    status: done
+    summary: "6 tasks (impl/test/gates), MVP = T001+T004"
+  implement:
+    status: done
+    summary: "AMP predicate narrowed to 0<pct<1; +1 test; 299 tests green, tsc clean"
+  review:
+    status: done
+    summary: "1 adversarial reviewer, 0 defects"
+    substeps:
+      code: pending
+      comments: pending
+      tests: pending
+      errors: pending
+      types: pending
+      simplify: pending
+      pr: pending

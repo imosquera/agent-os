@@ -1,0 +1,42 @@
+branch: 130-ads-audit-fix-policy-limited-ads
+title: 130 Ads Audit Fix Policy Limited Ads
+spec: 130-ads-audit-fix-policy-limited-ads
+updated: 2026-07-07 18:23
+note: ""
+
+phases:
+  specify:
+    status: done
+    summary: "8 functional requirements captured, 3 user stories, 0 clarifications needed"
+    description: ""
+    items:
+      - id: US1
+        title: "Identify Flagged Ads — audit names 2 policy-limited ads"
+        status: done
+      - id: US2
+        title: "Revise Flagged Ad Copy — remove Free desktop software triggers"
+        status: done
+      - id: US3
+        title: "Confirm All Ads Eligible — re-audit shows 0 restricted ads"
+        status: done
+  plan:
+    status: done
+    summary: "Python: add policy_summary GAQL fields + _parse_policy_summary() pure fn; inline research; parse boundary on gRPC rows"
+    description: ""
+  tasks:
+    status: done
+    summary: ""
+  implement:
+    status: done
+    summary: "T001-T009 complete; 2 policy-limited ads fixed; constitution audit 11/11 PASS; review findings applied"
+  review:
+    status: done
+    summary: "code+errors+simplify passes; 3 findings fixed (dead class, empty assert, next() simplification)"
+    substeps:
+      code: done
+      comments: done
+      tests: done
+      errors: done
+      types: done
+      simplify: done
+      pr: done

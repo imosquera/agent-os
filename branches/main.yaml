@@ -1,23 +1,42 @@
 branch: main
 title: Main
 spec: main
-updated: 2026-07-03 11:00
+updated: 2026-07-07 06:04
+note: ""
+
 phases:
   specify:
     status: done
+    summary: "6 FRs captured, 0 clarifications needed"
+    description: ""
+    items:
+      - id: US1
+        title: "Detect stale tasks after late clarify"
+        status: done
+      - id: US2
+        title: "Normal pipeline order sees no change"
+        status: done
+      - id: US3
+        title: "Missing tasks.md preserves existing error"
+        status: done
   plan:
     status: done
+    summary: "bash guard script + SKILL.md edit; Constitution Check 11/11 PASS; Parse Boundaries N/A (bash only)"
+    description: ""
   tasks:
     status: done
+    summary: ""
   implement:
     status: done
+    summary: ""
   review:
-    status: active
+    status: done
+    summary: "4 findings fixed (Critical: step-5 dead code in SKILL.md; Important: TASKS_MT=0 guard added to bash script, ARGUMENTS ambiguity, fallback underspecified)"
     substeps:
-      code: pending
-      comments: pending
+      code: done
+      comments: done
       tests: pending
-      errors: pending
+      errors: done
       types: pending
-      simplify: pending
+      simplify: done
       pr: done

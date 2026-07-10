@@ -1,0 +1,32 @@
+branch: ci-deploy-and-ai-max-settings
+title: Ci Deploy And Ai Max Settings
+spec: ci-deploy-and-ai-max-settings
+updated: 2026-07-05 14:36
+note: ""
+
+phases:
+  specify:
+    status: done
+    summary: ""
+    description: ""
+  plan:
+    status: done
+    summary: ""
+    description: ""
+  tasks:
+    status: done
+    summary: ""
+  implement:
+    status: done
+    summary: ""
+  review:
+    status: done
+    summary: "9 fixes applied: header injection, Promise<void>, claimOutreach logging, marked cast, TEMPLATE_FILENAME wired, dedup constant, test coverage. All gates green."
+    substeps:
+      code: done
+      comments: done
+      tests: done
+      errors: done
+      types: done
+      simplify: done
+      pr: pending

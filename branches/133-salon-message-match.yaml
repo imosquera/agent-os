@@ -1,0 +1,42 @@
+branch: 133-salon-message-match
+title: 133 Salon Message Match
+spec: 133-salon-message-match
+updated: 2026-07-09 06:53
+note: ""
+
+phases:
+  specify:
+    status: done
+    summary: "8 FRs, 6 SCs captured; fix Option A locked (keyword/ad pivot, no LP edit)"
+    description: "Close the salon campaign's keyword↔page message-match gap: pivot GTM keywords + RSA copy to book-by-text/no-show intent, negate software/app terms, commit a dry-run /adkit update plan. Live apply is a human gate."
+    items:
+      - id: US1
+        title: "Close the keyword→page message-match gap"
+        status: done
+      - id: US2
+        title: "Produce a runnable /adkit update plan"
+        status: done
+      - id: US3
+        title: "Realign RSA ad copy to book-by-text/no-show"
+        status: done
+  plan:
+    status: done
+    summary: "Option A pivot planned; constitution gate PASS (content/config, no code)"
+    description: ""
+  tasks:
+    status: done
+    summary: "5 tasks (content/config): plan JSON, keyword pivot, ad-copy realign, dry-run validate, verify"
+  implement:
+    status: done
+    summary: "Plan JSON dry-run-valid (0 live writes); keyword tiers + Hot RSA copy pivoted; all SC checks green"
+  review:
+    status: pending
+    summary: ""
+    substeps:
+      code: pending
+      comments: pending
+      tests: pending
+      errors: pending
+      types: pending
+      simplify: pending
+      pr: pending

@@ -1,5 +1,5 @@
 ---
-branch: 104-ads-audit-ad-copy-landing-url
+
 title: 104 Ads Audit Ad Copy Landing Url
 spec: 104-ads-audit-ad-copy-landing-url
 updated: 2026-07-03 14:34
